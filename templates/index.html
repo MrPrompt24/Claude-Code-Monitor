@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Claude Code Monitor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0f1115;
+    --card: #1a1d24;
+    --border: #2a2e37;
+    --text: #e6e8eb;
+    --muted: #8b909c;
+    --working: #3b82f6;
+    --waiting: #f59e0b;
+    --done: #22c55e;
+    --ended: #6b7280;
+    --info: #a78bfa;
+    --error: #ef4444;
+    --stale: #f97316;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  .page-content {
+    padding: 20px;
+    flex: 1;
+  }
+  .topbar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .logo-block {
+    display: flex;
+    flex-direction: column;
+  }
+  .logo-title {
+    font-size: 20px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+  }
+  .logo-sub {
+    font-size: 10px;
+    color: var(--muted);
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    align-self: flex-end;
+    margin-top: 2px;
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--done);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  .menu-btn {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    width: 34px;
+    height: 34px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .menu-btn:hover { background: rgba(255,255,255,0.08); }
+  .settings-panel {
+    display: none;
+    position: absolute;
+    top: 54px;
+    right: 20px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    width: 240px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    z-index: 10;
+  }
+  .settings-panel.open { display: block; }
+  .settings-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
+  .settings-row input[type="number"] {
+    width: 60px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 6px;
+  }
+  .settings-save {
+    width: 100%;
+    padding: 6px 0;
+    background: var(--working);
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .settings-saved-note {
+    font-size: 11px;
+    color: var(--done);
+    text-align: center;
+    margin-top: 6px;
+    min-height: 14px;
+  }
+  .app-footer {
+    padding: 8px 20px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    opacity: 0.85;
+  }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 14px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active {
+    color: var(--text);
+    border-bottom-color: var(--working);
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  #empty, #archiveEmpty {
+    color: var(--muted);
+    font-size: 14px;
+    padding: 40px 0;
+    text-align: center;
+  }
+
+  /* --- statystyki --- */
+  .stat-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+    margin-bottom: 22px;
+  }
+  .stat-tile {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .stat-tile-label {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .stat-tile-value {
+    font-size: 22px;
+    font-weight: 600;
+    margin-top: 4px;
+  }
+  .chart-block {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .chart-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .hbar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+  .hbar-label {
+    width: 110px;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+  }
+  .hbar-track {
+    flex: 1;
+    background: rgba(255,255,255,0.04);
+    border-radius: 4px;
+    height: 16px;
+    position: relative;
+  }
+  .hbar-fill {
+    background: var(--working);
+    height: 100%;
+    border-radius: 4px;
+    min-width: 3px;
+  }
+  .hbar-count {
+    width: 30px;
+    text-align: right;
+    color: var(--muted);
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .daily-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 90px;
+  }
+  .daily-bar-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    justify-content: flex-end;
+    position: relative;
+  }
+  .daily-bar {
+    width: 100%;
+    max-width: 22px;
+    background: var(--working);
+    border-radius: 3px 3px 0 0;
+    min-height: 2px;
+    cursor: default;
+  }
+  .daily-bar-label {
+    font-size: 9px;
+    color: var(--muted);
+    margin-top: 4px;
+    white-space: nowrap;
+  }
+  .daily-bar-wrap:hover .daily-bar { background: var(--info); }
+  .daily-bar-wrap[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #000;
+    color: #fff;
+    font-size: 10px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+    margin-bottom: 4px;
+    z-index: 5;
+  }
+  .stats-empty {
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 30px 0;
+  }
+
+  /* --- modale (Pomoc / O aplikacji) --- */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 24px;
+    max-width: 440px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .modal-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 18px;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .modal-body { font-size: 13px; line-height: 1.6; color: var(--text); }
+  .modal-body h4 { font-size: 13px; margin: 14px 0 4px 0; }
+  .modal-body a { color: var(--working); }
+  .about-version {
+    display: inline-block;
+    background: rgba(255,255,255,0.06);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: 6px;
+  }
+
+  .archive-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .archive-row {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .archive-row-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+  }
+  .archive-row-head:hover { background: rgba(255,255,255,0.03); }
+  .archive-row-main { flex: 1; min-width: 0; }
+  .archive-cwd {
+    font-size: 13px;
+    font-family: Consolas, monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .archive-meta {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 3px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .archive-chevron {
+    color: var(--muted);
+    font-size: 12px;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+  }
+  .archive-row.open .archive-chevron { transform: rotate(90deg); }
+  .archive-detail {
+    display: none;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 8px 16px 14px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .archive-row.open .archive-detail { display: block; }
+  .archive-loading {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 8px 0;
+  }
+  .grid {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .card.error { border-color: var(--error); }
+  .card.stale { border-color: var(--stale); }
+
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: rgba(255,255,255,0.02);
+  }
+  .status-icon {
+    font-size: 26px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .status-icon.pulsing { animation: pulse 1.4s infinite; }
+  .status-main { flex: 1; min-width: 0; }
+  .status-label {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .status-label.working { color: var(--working); }
+  .status-label.waiting { color: var(--waiting); }
+  .status-label.done { color: var(--done); }
+  .status-label.ended { color: var(--ended); }
+  .status-label.info { color: var(--info); }
+  .status-label.error { color: var(--error); }
+  .status-label.stale { color: var(--stale); }
+
+  .cwd {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: Consolas, monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 2px;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .meta-row span { white-space: nowrap; }
+  .status-time {
+    font-size: 12px;
+    color: var(--muted);
+    flex-shrink: 0;
+    text-align: right;
+  }
+  .status-time .abs-time {
+    display: block;
+    font-size: 11px;
+    margin-top: 2px;
+  }
+
+  .agents-section {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .agents-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .agents-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .agent-tile {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-width: 140px;
+    max-width: 220px;
+  }
+  .agent-tile.running { border-color: var(--working); }
+  .agent-tile-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .agent-dismiss {
+    margin-left: auto;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 400;
+    padding: 0 2px;
+  }
+  .agent-dismiss:hover { color: var(--error); }
+  .agent-tile-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .agent-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 999px;
+    color: #fff;
+  }
+  .agent-badge.running { background: var(--working); }
+  .agent-badge.done { background: var(--done); color: #062b0f; }
+
+  .timeline {
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 8px 16px 12px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .timeline-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 13px;
+  }
+  .timeline-icon {
+    font-size: 15px;
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+  }
+  .timeline-text {
+    flex: 1;
+    color: var(--text);
+  }
+  .timeline-text.error { color: var(--error); }
+  .timeline-time {
+    font-size: 11px;
+    color: var(--muted);
+    flex-shrink: 0;
+    font-family: Consolas, monospace;
+    padding-top: 1px;
+  }
+  .timeline-preview {
+    padding: 4px 16px 2px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .timeline-preview .timeline-row {
+    padding: 4px 0;
+    font-size: 12px;
+    opacity: 0.85;
+  }
+  .timeline-toggle {
+    padding: 6px 16px 10px 16px;
+    font-size: 11px;
+    color: var(--working);
+    cursor: pointer;
+    user-select: none;
+  }
+  .timeline-toggle:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="logo-block">
+      <div class="logo-title"><span class="dot"></span> Claude Code Monitor</div>
+      <div class="logo-sub">Powered By MrPrompt</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="menu-btn" id="helpBtn" title="Pomoc">❓</button>
+      <button class="menu-btn" id="aboutBtn" title="O aplikacji">ℹ️</button>
+      <button class="menu-btn" id="menuBtn" title="Ustawienia">⚙️</button>
+    </div>
+    <div class="settings-panel" id="settingsPanel">
+      <div class="settings-title">Ustawienia</div>
+      <div class="settings-row">
+        <span>Próg zawieszenia (min)</span>
+        <input type="number" id="staleMinutes" min="1" max="60" value="3">
+      </div>
+      <div class="settings-row">
+        <span>Dźwięk powiadomień</span>
+        <input type="checkbox" id="soundEnabled" checked>
+      </div>
+      <div class="settings-row">
+        <span>Powiadomienia systemowe</span>
+        <span id="notifStatus" style="font-size:11px;color:var(--muted);"></span>
+      </div>
+      <div id="notifDeniedHint" style="display:none;font-size:11px;color:var(--muted);margin:-4px 0 10px 0;line-height:1.5;">
+        Przeglądarka zablokowała to wcześniej i nie można już poprosić o zgodę
+        z poziomu strony. Odblokuj ręcznie: kliknij ikonę 🔒/ⓘ przy tytule okna
+        (jeśli widoczna) → Uprawnienia → Powiadomienia → Zezwól, albo wpisz w
+        pasku adresu zwykłej karty Edge: <code>edge://settings/content/notifications</code>
+        i usuń <code>127.0.0.1:5151</code> z listy zablokowanych.
+      </div>
+      <button class="settings-save" id="notifPermBtn" style="background:var(--info);margin-bottom:8px;">Zezwól na powiadomienia</button>
+      <button class="settings-save" id="settingsSave">Zapisz</button>
+      <div class="settings-saved-note" id="settingsSavedNote"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="helpOverlay">
+    <div class="modal-box">
+      <div class="modal-title">Pomoc <button class="modal-close" onclick="closeModal('helpOverlay')">✕</button></div>
+      <div class="modal-body">
+        <p><strong>Do czego służy ta aplikacja?</strong><br>
+        Claude Code Monitor pokazuje na żywo, co w danej chwili robi Claude Code:
+        czy właśnie pracuje, czeka na Twoją reakcję, skończył, czy któreś narzędzie
+        zwróciło błąd — bez konieczności patrzenia w okno terminala/VS Code.</p>
+
+        <h4>Zakładka "Aktywne sesje"</h4>
+        <p>Karta dla każdej trwającej rozmowy: kolorowy status, ostatnio użyte
+        narzędzie, kafelki uruchomionych agentów (jeśli jakieś działają) oraz
+        na stałe przewijana historia zdarzeń.</p>
+
+        <h4>Zakładka "Archiwum rozmów"</h4>
+        <p>Lista zakończonych sesji. Kliknij wiersz, żeby rozwinąć pełną historię
+        danej rozmowy.</p>
+
+        <h4>Zakładka "Statystyki"</h4>
+        <p>Podsumowania: liczba sesji, średni czas trwania, liczba błędów,
+        najczęściej używane narzędzia oraz wykres aktywności z ostatnich 14 dni.</p>
+
+        <h4>Ikona ⚙️ (Ustawienia)</h4>
+        <p>Próg, po którym status oznaczany jest jako "może się zawiesił", włącznik
+        dźwięku powiadomień oraz przycisk do zezwolenia na powiadomienia systemowe.</p>
+
+        <h4>Ikona w zasobniku systemowym</h4>
+        <p>Kolorowa kropka obok zegara pokazuje ogólny status bez otwierania okna;
+        kliknięcie otwiera dashboard, prawy klik daje menu Otwórz/Zamknij.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="aboutOverlay">
+    <div class="modal-box">
+      <div class="modal-title">O aplikacji <button class="modal-close" onclick="closeModal('aboutOverlay')">✕</button></div>
+      <div class="modal-body">
+        <p><strong>Claude Code Monitor</strong><span class="about-version">wersja 1.0</span></p>
+        <p>Lokalny dashboard do monitorowania pracy Claude Code w czasie rzeczywistym —
+        status sesji, historia zdarzeń, agenci, statystyki i archiwum rozmów.</p>
+        <p>Twórca: <strong>MrPrompt</strong><br>
+        <a href="https://mrprompt.eu/" target="_blank" rel="noopener">https://mrprompt.eu/</a></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="tabs">
+      <button class="tab-btn active" id="tabActiveBtn">Aktywne sesje</button>
+      <button class="tab-btn" id="tabArchiveBtn">Archiwum rozmów</button>
+      <button class="tab-btn" id="tabStatsBtn">Statystyki</button>
+      <button class="tab-btn" id="tabTokensBtn">Tokeny</button>
+    </div>
+
+    <div class="tab-panel active" id="tabActivePanel">
+      <div id="empty">Brak zdarzeń jeszcze — czekam na aktywność Claude Code...</div>
+      <div class="grid" id="grid"></div>
+    </div>
+
+    <div class="tab-panel" id="tabArchivePanel">
+      <div id="archiveEmpty" style="display:none;">Brak zarchiwizowanych rozmów jeszcze.</div>
+      <div class="archive-list" id="archiveList"></div>
+    </div>
+
+    <div class="tab-panel" id="tabStatsPanel">
+      <div id="statsContent"></div>
+    </div>
+
+    <div class="tab-panel" id="tabTokensPanel">
+      <div id="tokensContent"></div>
+    </div>
+  </div>
+
+  <footer class="app-footer">© Copyright By MrPrompt Open Innovation Center · All Rights Reserved</footer>
+
+<script>
+function fmtTime(iso) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return d.toLocaleTimeString();
+}
+
+function fmtRelative(iso, nowIso) {
+  if (!iso) return "-";
+  const then = new Date(iso).getTime();
+  const now = nowIso ? new Date(nowIso).getTime() : Date.now();
+  const sec = Math.max(0, Math.round((now - then) / 1000));
+  if (sec < 5) return "przed chwilą";
+  if (sec < 60) return `${sec}s temu`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min} min temu`;
+  const h = Math.round(min / 60);
+  return `${h} godz. temu`;
+}
+
+function shortSid(sid) {
+  if (!sid) return "unknown";
+  return sid.length > 8 ? sid.slice(0, 8) : sid;
+}
+
+function renderTimelineRows(history) {
+  return history.map(h => `
+    <div class="timeline-row">
+      <span class="timeline-icon">${h.icon}</span>
+      <span class="timeline-text ${h.category === 'error' ? 'error' : ''}">${h.text}</span>
+      <span class="timeline-time">${fmtTime(h.ts)}</span>
+    </div>
+  `).join("");
+}
+
+// zapamietujemy pozycje scrolla kazdej karty (po session_id), zeby nie skakalo przy odswiezaniu
+const scrollPositions = {};
+// ktore sesje maja rozwinieta PELNA historie (domyslnie zwiniete - widac tylko ostatnie zdarzenia)
+const expandedTimelines = new Set();
+let lastActiveSessions = [];
+let lastServerTime = null;
+
+function toggleTimeline(sid) {
+  if (expandedTimelines.has(sid)) {
+    expandedTimelines.delete(sid);
+  } else {
+    expandedTimelines.add(sid);
+  }
+  render(lastActiveSessions, lastServerTime);
+}
+
+// rekcznie odrzucone kafelki agentow (poza automatycznym wygasaniem po stronie serwera)
+const dismissedAgents = new Set();
+
+function dismissAgent(sid, agentId) {
+  dismissedAgents.add(sid + ":" + agentId);
+  render(lastActiveSessions, lastServerTime);
+}
+
+function render(sessions, serverTime) {
+  lastActiveSessions = sessions;
+  lastServerTime = serverTime;
+  const grid = document.getElementById("grid");
+  const empty = document.getElementById("empty");
+
+  // zapisz aktualne pozycje scrolla przed nadpisaniem DOM
+  document.querySelectorAll(".timeline[data-sid]").forEach(el => {
+    scrollPositions[el.dataset.sid] = {
+      top: el.scrollTop,
+      atBottom: el.scrollTop + el.clientHeight >= el.scrollHeight - 10,
+    };
+  });
+
+  if (!sessions.length) {
+    empty.style.display = "block";
+    grid.innerHTML = "";
+    return;
+  }
+  empty.style.display = "none";
+
+  grid.innerHTML = sessions.map((s) => {
+    const isExpanded = expandedTimelines.has(s.session_id);
+    const historyHtml = isExpanded
+      ? `<div class="timeline-toggle" onclick="toggleTimeline('${s.session_id}')">▲ Ukryj szczegóły</div>
+         <div class="timeline" data-sid="${s.session_id}">${renderTimelineRows(s.history)}</div>`
+      : `<div class="timeline-preview">${renderTimelineRows(s.history.slice(-3))}</div>
+         <div class="timeline-toggle" onclick="toggleTimeline('${s.session_id}')">▾ Pokaż pełną historię (${s.history.length} zdarzeń)</div>`;
+
+    const isPulsing = s.status_category === "working" || s.status_category === "waiting" || s.status_category === "stale";
+
+    const agents = (s.agents || []).filter(a => !dismissedAgents.has(s.session_id + ":" + a.id));
+    const agentsHtml = agents.length ? `
+      <div class="agents-section">
+        <div class="agents-title">Agenci (${agents.length})</div>
+        <div class="agents-grid">
+          ${agents.map(a => `
+            <div class="agent-tile ${a.status === 'pracuje' ? 'running' : ''}">
+              <div class="agent-tile-top">
+                🤖 <span class="agent-badge ${a.status === 'pracuje' ? 'running' : 'done'}">${a.status}</span>
+                ${a.status !== 'pracuje' ? `<span class="agent-dismiss" title="Odrzuć" onclick="dismissAgent('${s.session_id}','${a.id}')">✕</span>` : ""}
+              </div>
+              <div class="agent-tile-label" title="${a.label}">${a.label}</div>
+              ${a.result ? `<div class="agent-tile-label" style="margin-top:2px;font-style:italic;" title="${a.result}">${a.result}</div>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    ` : "";
+
+    return `
+      <div class="card ${s.status_category === 'error' ? 'error' : ''} ${s.status_category === 'stale' ? 'stale' : ''}">
+        <div class="status-bar">
+          <div class="status-icon ${isPulsing ? 'pulsing' : ''}">${s.status_icon}</div>
+          <div class="status-main">
+            <div class="status-label ${s.status_category}">${s.status_label}</div>
+            <div class="cwd">${s.cwd || "?"}</div>
+            <div class="meta-row">
+              <span>sesja: ${shortSid(s.session_id)}</span>
+              ${s.last_tool ? `<span>narzędzie: ${s.last_tool}</span>` : ""}
+              <span>ostatnia aktywność: ${fmtTime(s.last_ts)}</span>
+            </div>
+          </div>
+          <div class="status-time">${fmtRelative(s.last_ts, serverTime)}<span class="abs-time">${fmtTime(s.last_ts)}</span></div>
+        </div>
+        ${agentsHtml}
+        ${historyHtml}
+      </div>
+    `;
+  }).join("");
+
+  // przywroc pozycje scrolla (albo zjedz na dol, jesli user tam byl)
+  document.querySelectorAll(".timeline[data-sid]").forEach(el => {
+    const saved = scrollPositions[el.dataset.sid];
+    // domyslnie (nowa karta) trzymamy sie dolu - jak w zywym logu; jesli user przewinal w gore, zostaw go tam
+    if (!saved || saved.atBottom) {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTop = saved.top;
+    }
+  });
+}
+
+// --- powiadomienia (desktop toast + dzwiek) ---
+const NOTIFY_CATEGORIES = new Set(["waiting", "error", "stale"]);
+const lastCategoryBySession = {};
+
+function beep(category) {
+  if (localStorage.getItem("soundEnabled") === "false") return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.value = category === "error" ? 220 : 660;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.35);
+    if (category === "error") {
+      setTimeout(() => beepOnce(ctx, 220), 250);
+    }
+  } catch (e) {
+    // Web Audio niedostepne - pomijamy dzwiek
+  }
+}
+
+function beepOnce(ctx, freq) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.15, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.3);
+}
+
+function maybeNotify(sessions) {
+  sessions.forEach(s => {
+    const prev = lastCategoryBySession[s.session_id];
+    const curr = s.status_category;
+    if (prev !== curr && NOTIFY_CATEGORIES.has(curr)) {
+      beep(curr);
+      if (window.Notification && Notification.permission === "granted") {
+        new Notification("Claude Code Monitor", {
+          body: `${s.cwd || "sesja"}: ${s.status_label}`,
+          tag: s.session_id,
+        });
+      }
+    }
+    lastCategoryBySession[s.session_id] = curr;
+  });
+}
+
+async function poll() {
+  try {
+    const res = await fetch("/api/status");
+    const data = await res.json();
+    const sessions = data.sessions || [];
+    maybeNotify(sessions);
+    render(sessions, data.server_time);
+  } catch (e) {
+    // serwer chwilowo niedostępny - ignoruj, spróbuj ponownie
+  }
+}
+
+poll();
+setInterval(poll, 1000);
+
+// --- zakladki Aktywne / Archiwum / Statystyki ---
+const tabActiveBtn = document.getElementById("tabActiveBtn");
+const tabArchiveBtn = document.getElementById("tabArchiveBtn");
+const tabStatsBtn = document.getElementById("tabStatsBtn");
+const tabTokensBtn = document.getElementById("tabTokensBtn");
+const tabActivePanel = document.getElementById("tabActivePanel");
+const tabArchivePanel = document.getElementById("tabArchivePanel");
+const tabStatsPanel = document.getElementById("tabStatsPanel");
+const tabTokensPanel = document.getElementById("tabTokensPanel");
+const archiveList = document.getElementById("archiveList");
+const archiveEmpty = document.getElementById("archiveEmpty");
+
+let archiveTimer = null;
+let statsTimer = null;
+let tokensTimer = null;
+const archiveDetailCache = {};
+const openArchiveRows = new Set();
+
+const TABS = {
+  active: { btn: tabActiveBtn, panel: tabActivePanel },
+  archive: { btn: tabArchiveBtn, panel: tabArchivePanel },
+  stats: { btn: tabStatsBtn, panel: tabStatsPanel },
+  tokens: { btn: tabTokensBtn, panel: tabTokensPanel },
+};
+
+function switchTab(name) {
+  Object.entries(TABS).forEach(([key, t]) => {
+    t.btn.classList.toggle("active", key === name);
+    t.panel.classList.toggle("active", key === name);
+  });
+
+  if (archiveTimer) { clearInterval(archiveTimer); archiveTimer = null; }
+  if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
+  if (tokensTimer) { clearInterval(tokensTimer); tokensTimer = null; }
+
+  if (name === "archive") {
+    loadArchiveList();
+    archiveTimer = setInterval(loadArchiveList, 5000);
+  } else if (name === "stats") {
+    loadStats();
+    statsTimer = setInterval(loadStats, 10000);
+  } else if (name === "tokens") {
+    loadTokens();
+    tokensTimer = setInterval(loadTokens, 10000);
+  }
+}
+
+tabActiveBtn.addEventListener("click", () => switchTab("active"));
+tabArchiveBtn.addEventListener("click", () => switchTab("archive"));
+tabStatsBtn.addEventListener("click", () => switchTab("stats"));
+tabTokensBtn.addEventListener("click", () => switchTab("tokens"));
+
+function fmtDateTime(iso) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return d.toLocaleString();
+}
+
+async function loadArchiveList() {
+  try {
+    const res = await fetch("/api/archive");
+    const data = await res.json();
+    renderArchiveList(data.sessions || []);
+  } catch (e) {
+    // serwer chwilowo niedostepny
+  }
+}
+
+function renderArchiveList(sessions) {
+  if (!sessions.length) {
+    archiveEmpty.style.display = "block";
+    archiveList.innerHTML = "";
+    return;
+  }
+  archiveEmpty.style.display = "none";
+
+  archiveList.innerHTML = sessions.map(s => {
+    const isOpen = openArchiveRows.has(s.session_id);
+    const cached = archiveDetailCache[s.session_id];
+    const detailHtml = isOpen
+      ? (cached ? renderTimelineRows(cached.history) : `<div class="archive-loading">Wczytywanie...</div>`)
+      : "";
+    return `
+      <div class="archive-row ${isOpen ? 'open' : ''}" data-sid="${s.session_id}">
+        <div class="archive-row-head" onclick="toggleArchiveRow('${s.session_id}')">
+          <span class="archive-chevron">▶</span>
+          <div class="archive-row-main">
+            <div class="archive-cwd">${s.cwd || "?"}</div>
+            <div class="archive-meta">
+              <span>zakończona: ${fmtDateTime(s.ended_ts)}</span>
+              <span>zdarzeń: ${s.event_count}</span>
+              <span>ostatni status: ${s.last_status_label || "-"}</span>
+            </div>
+          </div>
+        </div>
+        <div class="archive-detail" data-sid="${s.session_id}">${detailHtml}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function toggleArchiveRow(sid) {
+  if (openArchiveRows.has(sid)) {
+    openArchiveRows.delete(sid);
+  } else {
+    openArchiveRows.add(sid);
+    if (!archiveDetailCache[sid]) {
+      try {
+        const res = await fetch(`/api/archive/${sid}`);
+        archiveDetailCache[sid] = await res.json();
+      } catch (e) {
+        // pomijamy - zostanie "Wczytywanie..." przy nastepnej probie
+      }
+    }
+  }
+  loadArchiveList();
+}
+
+// --- statystyki i wykresy ---
+const statsContent = document.getElementById("statsContent");
+
+function fmtMinutes(mins) {
+  if (mins < 1) return `${Math.round(mins * 60)}s`;
+  if (mins < 60) return `${Math.round(mins)} min`;
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  return `${h}g ${m}min`;
+}
+
+async function loadStats() {
+  try {
+    const res = await fetch("/api/stats");
+    const data = await res.json();
+    renderStats(data);
+  } catch (e) {
+    statsContent.innerHTML = `<div class="stats-empty">Nie udało się wczytać statystyk.</div>`;
+  }
+}
+
+function renderStats(d) {
+  if (!d.total_sessions) {
+    statsContent.innerHTML = `<div class="stats-empty">Brak jeszcze danych do statystyk.</div>`;
+    return;
+  }
+
+  const tiles = `
+    <div class="stat-tiles">
+      <div class="stat-tile">
+        <div class="stat-tile-label">Sesje łącznie</div>
+        <div class="stat-tile-value">${d.total_sessions}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-label">Śr. czas sesji</div>
+        <div class="stat-tile-value">${fmtMinutes(d.avg_session_minutes)}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-label">Błędy narzędzi</div>
+        <div class="stat-tile-value">${d.error_count}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-label">Wiadomości dziś</div>
+        <div class="stat-tile-value">${d.messages_today}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-label">Wiadomości w tym tygodniu</div>
+        <div class="stat-tile-value">${d.messages_this_week}</div>
+      </div>
+    </div>
+  `;
+
+  const maxToolCount = Math.max(1, ...d.tool_usage.map(t => t.count));
+  const toolBars = d.tool_usage.map(t => `
+    <div class="hbar-row">
+      <span class="hbar-label" title="${t.tool}">${t.tool}</span>
+      <div class="hbar-track">
+        <div class="hbar-fill" style="width:${(t.count / maxToolCount * 100).toFixed(1)}%"></div>
+      </div>
+      <span class="hbar-count">${t.count}</span>
+    </div>
+  `).join("");
+  const toolChart = `
+    <div class="chart-block">
+      <div class="chart-title">Najczęściej używane narzędzia</div>
+      ${toolBars || '<div class="stats-empty">Brak danych</div>'}
+    </div>
+  `;
+
+  const maxDay = Math.max(1, ...d.days_series.map(x => x.events));
+  const dayBars = d.days_series.map(x => `
+    <div class="daily-bar-wrap" title="${x.label}: ${x.events} zdarzeń, ${x.messages} wiadomości">
+      <div class="daily-bar" style="height:${Math.max(2, x.events / maxDay * 100).toFixed(1)}%"></div>
+      <div class="daily-bar-label">${x.label}</div>
+    </div>
+  `).join("");
+  const dayChart = `
+    <div class="chart-block">
+      <div class="chart-title">Aktywność w ostatnich 14 dniach</div>
+      <div class="daily-chart">${dayBars}</div>
+    </div>
+  `;
+
+  statsContent.innerHTML = tiles + toolChart + dayChart;
+}
+
+// --- tokeny (prawdziwe zuzycie z transkryptu) ---
+const tokensContent = document.getElementById("tokensContent");
+
+function fmtTokens(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+  return String(n);
+}
+
+async function loadTokens() {
+  try {
+    const res = await fetch("/api/tokens");
+    const data = await res.json();
+    renderTokens(data);
+  } catch (e) {
+    tokensContent.innerHTML = `<div class="stats-empty">Nie udało się wczytać danych o tokenach.</div>`;
+  }
+}
+
+function tokenBreakdownLine(b) {
+  return `Input: ${fmtTokens(b.input)} · Output: ${fmtTokens(b.output)} · Cache: ${fmtTokens(b.cache_creation + b.cache_read)}`;
+}
+
+function renderTokens(d) {
+  if (!d.today.total && !d.this_week.total) {
+    tokensContent.innerHTML = `<div class="stats-empty">Brak jeszcze danych o zużyciu tokenów.</div>`;
+    return;
+  }
+
+  const tiles = `
+    <div class="stat-tiles">
+      <div class="stat-tile">
+        <div class="stat-tile-label">Tokeny dziś</div>
+        <div class="stat-tile-value">${fmtTokens(d.today.total)}</div>
+        <div class="archive-meta" style="margin-top:6px;">${tokenBreakdownLine(d.today)}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-label">Tokeny w tym tygodniu</div>
+        <div class="stat-tile-value">${fmtTokens(d.this_week.total)}</div>
+        <div class="archive-meta" style="margin-top:6px;">${tokenBreakdownLine(d.this_week)}</div>
+      </div>
+    </div>
+  `;
+
+  const maxDay = Math.max(1, ...d.days_series.map(x => x.total));
+  const dayBars = d.days_series.map(x => `
+    <div class="daily-bar-wrap" title="${x.label}: ${fmtTokens(x.total)} tokenów (${tokenBreakdownLine(x)})">
+      <div class="daily-bar" style="height:${Math.max(2, x.total / maxDay * 100).toFixed(1)}%"></div>
+      <div class="daily-bar-label">${x.label}</div>
+    </div>
+  `).join("");
+  const dayChart = `
+    <div class="chart-block">
+      <div class="chart-title">Zużycie tokenów w ostatnich 14 dniach</div>
+      <div class="daily-chart">${dayBars}</div>
+    </div>
+  `;
+
+  tokensContent.innerHTML = tiles + dayChart;
+}
+
+// --- modale (Pomoc / O aplikacji) ---
+function openModal(id) {
+  document.getElementById(id).classList.add("open");
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove("open");
+}
+document.getElementById("helpBtn").addEventListener("click", () => openModal("helpOverlay"));
+document.getElementById("aboutBtn").addEventListener("click", () => openModal("aboutOverlay"));
+["helpOverlay", "aboutOverlay"].forEach(id => {
+  document.getElementById(id).addEventListener("click", (e) => {
+    if (e.target.id === id) closeModal(id);
+  });
+});
+
+// --- menu ustawien ---
+const menuBtn = document.getElementById("menuBtn");
+const settingsPanel = document.getElementById("settingsPanel");
+const staleMinutesInput = document.getElementById("staleMinutes");
+const soundEnabledInput = document.getElementById("soundEnabled");
+const settingsSaveBtn = document.getElementById("settingsSave");
+const settingsSavedNote = document.getElementById("settingsSavedNote");
+
+menuBtn.addEventListener("click", () => {
+  settingsPanel.classList.toggle("open");
+});
+document.addEventListener("click", (e) => {
+  if (!settingsPanel.contains(e.target) && e.target !== menuBtn) {
+    settingsPanel.classList.remove("open");
+  }
+});
+
+soundEnabledInput.checked = localStorage.getItem("soundEnabled") !== "false";
+
+const notifStatusEl = document.getElementById("notifStatus");
+const notifPermBtn = document.getElementById("notifPermBtn");
+
+function renderNotifStatus() {
+  if (!window.Notification) {
+    notifStatusEl.textContent = "niedostępne";
+    notifPermBtn.style.display = "none";
+    return;
+  }
+  const perm = Notification.permission;
+  const deniedHint = document.getElementById("notifDeniedHint");
+  if (perm === "granted") {
+    notifStatusEl.textContent = "włączone ✓";
+    notifPermBtn.style.display = "none";
+    deniedHint.style.display = "none";
+  } else if (perm === "denied") {
+    notifStatusEl.textContent = "zablokowane w przeglądarce";
+    notifPermBtn.style.display = "none";
+    deniedHint.style.display = "block";
+  } else {
+    notifStatusEl.textContent = "nie ustawione";
+    notifPermBtn.style.display = "block";
+    deniedHint.style.display = "none";
+  }
+}
+renderNotifStatus();
+
+notifPermBtn.addEventListener("click", async () => {
+  const result = await Notification.requestPermission();
+  renderNotifStatus();
+});
+
+async function loadConfig() {
+  try {
+    const res = await fetch("/api/config");
+    const cfg = await res.json();
+    staleMinutesInput.value = Math.round((cfg.stale_after_seconds || 180) / 60);
+  } catch (e) {
+    // zostaw wartosc domyslna z HTML
+  }
+}
+loadConfig();
+
+settingsSaveBtn.addEventListener("click", async () => {
+  const minutes = Math.max(1, Math.min(60, parseInt(staleMinutesInput.value, 10) || 3));
+  localStorage.setItem("soundEnabled", soundEnabledInput.checked ? "true" : "false");
+  try {
+    await fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stale_after_seconds: minutes * 60 }),
+    });
+    settingsSavedNote.textContent = "Zapisano ✓";
+  } catch (e) {
+    settingsSavedNote.textContent = "Błąd zapisu";
+  }
+  setTimeout(() => { settingsSavedNote.textContent = ""; }, 2000);
+});
+</script>
+</body>
+</html>

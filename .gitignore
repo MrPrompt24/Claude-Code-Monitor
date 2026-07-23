@@ -1,0 +1,16 @@
+# Dane wygenerowane przy uzyciu - nigdy nie commitowac (historia rozmow, sciezki, itp.)
+events.jsonl
+archive/
+config.json
+flask.log
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# System
+.DS_Store
+Thumbs.db
